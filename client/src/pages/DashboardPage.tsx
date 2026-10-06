@@ -1,10 +1,56 @@
+import { FormEvent, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { useLogout } from '@/lib/authHooks';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card } from '@/components/ui/card';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/lib/api';
+
+interface Meeting {
+  _id: string;
+  title: string;
+  roomId: string;
+  status: 'scheduled' | 'live' | 'ended';
+  scheduledAt: string;
+}
+
+const useMeetings = () =>
+  useQuery({
+    queryKey: ['meetings'],
+    queryFn: async () => {
+      const { data } = await api.get<{ meetings: Meeting[] }>('/meetings');
+      return data.meetings;
+    },
+  });
+
+const useCreateMeeting = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (title: string) => {
+      const { data } = await api.post<{ meeting: Meeting }>('/meetings', { title });
+      return data.meeting;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['meetings'] }),
+  });
+};
 
 export const DashboardPage = () => {
   const user = useAuthStore((s) => s.user);
   const logout = useLogout();
+  const navigate = useNavigate();
+  const { data: meetings, isLoading } = useMeetings();
+  const createMeeting = useCreateMeeting();
+  const [title, setTitle] = useState('');
+
+  const handleCreate = (e: FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) return;
+    createMeeting.mutate(title.trim(), {
+      onSuccess: (meeting) => navigate(`/lobby/${meeting.roomId}`),
+    });
+  };
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
@@ -18,11 +64,38 @@ export const DashboardPage = () => {
         </Button>
       </div>
 
-      <div className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-500">
-        Meeting list, scheduling, and the video call UI land here in Week 2's
-        remaining days — this page just confirms the protected route and
-        auth flow are wired correctly.
-      </div>
+      <Card className="mb-6">
+        <h2 className="mb-3 text-sm font-medium">Start a new meeting</h2>
+        <form onSubmit={handleCreate} className="flex gap-2">
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Meeting title, e.g. Sprint Planning"
+          />
+          <Button type="submit" disabled={createMeeting.isPending}>
+            {createMeeting.isPending ? 'Creating…' : 'Create & join'}
+          </Button>
+        </form>
+      </Card>
+
+      <Card>
+        <h2 className="mb-3 text-sm font-medium">Your meetings</h2>
+        {isLoading && <p className="text-sm text-slate-400">Loading…</p>}
+        {meetings?.length === 0 && <p className="text-sm text-slate-400">No meetings yet.</p>}
+        <div className="space-y-2">
+          {meetings?.map((m) => (
+            <div key={m._id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
+              <div>
+                <p className="text-sm font-medium">{m.title}</p>
+                <p className="text-xs text-slate-400 capitalize">{m.status}</p>
+              </div>
+              <Button variant="secondary" onClick={() => navigate(`/lobby/${m.roomId}`)}>
+                Join
+              </Button>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 };
