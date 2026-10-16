@@ -4,6 +4,8 @@ import { SignupPage } from '@/pages/SignupPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { LobbyPage } from '@/pages/LobbyPage';
 import { MeetingRoomPage } from '@/pages/MeetingRoomPage';
+import PostMeetingDashboard from '@/pages/PostMeetingDashboard';
+import ProjectBoard from '@/pages/ProjectBoard';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 function App() {
@@ -16,6 +18,8 @@ function App() {
 
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/summaries" element={<PostMeetingDashboard />} />
+          <Route path="/projects" element={<ProjectBoard />} />
           <Route path="/lobby/:roomId" element={<LobbyPage />} />
           <Route path="/meeting/:roomId" element={<MeetingRoomPage />} />
         </Route>

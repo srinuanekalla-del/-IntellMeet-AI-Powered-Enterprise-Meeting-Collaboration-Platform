@@ -5,7 +5,7 @@ const notificationSchema = new mongoose.Schema(
     recipient: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     type: {
       type: String,
-      enum: ['meeting-invite', 'meeting-starting', 'task-assigned', 'chat-mention'],
+      enum: ['meeting-invite', 'meeting-starting', 'task-assigned', 'chat-mention', 'action-item'],
       required: true,
     },
     message: { type: String, required: true },

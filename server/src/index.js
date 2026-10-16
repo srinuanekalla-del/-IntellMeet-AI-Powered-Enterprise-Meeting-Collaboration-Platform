@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import aiRoutes from './routes/aiRoutes.js';
+import workspaceRoutes from './routes/workspaceRoutes.js';
 import express from 'express';
 import http from 'http';
 import cors from 'cors';
@@ -50,9 +52,10 @@ app.get('/api/health', (_req, res) => res.json({ status: 'ok', time: new Date() 
 // --- Feature routes ---
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
+app.use('/api/meetings', aiRoutes);  
 app.use('/api/meetings', meetingRoutes);
 app.use('/api/notifications', notificationRoutes);
-
+app.use('/api', workspaceRoutes);              
 // --- Error handling (must be last) ---
 app.use(notFound);
 app.use(errorHandler);

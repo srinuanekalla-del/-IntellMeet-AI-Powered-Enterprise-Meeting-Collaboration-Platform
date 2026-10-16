@@ -1,5 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { NotificationBell } from '@/components/NotificationBell';
 import { useAuthStore } from '@/store/authStore';
 import { useLogout } from '@/lib/authHooks';
 import { Button } from '@/components/ui/button';
@@ -59,9 +60,18 @@ export const DashboardPage = () => {
           <h1 className="text-2xl font-semibold">IntellMeet Dashboard</h1>
           <p className="text-slate-500">Signed in as {user?.name} ({user?.email})</p>
         </div>
-        <Button variant="secondary" onClick={() => logout.mutate()}>
-          Log out
-        </Button>
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+          <Button variant="secondary" onClick={() => navigate('/summaries')}>
+            Summaries
+          </Button>
+          <Button variant="secondary" onClick={() => navigate('/projects')}>
+            Projects
+          </Button>
+          <Button variant="secondary" onClick={() => logout.mutate()}>
+            Log out
+          </Button>
+        </div>
       </div>
 
       <Card className="mb-6">

@@ -1,5 +1,6 @@
 import { Meeting } from '../models/Meeting.js';
 import { notifyUser } from '../services/notificationService.js';
+import { transcribeAudio, summarizeTranscript } from '../services/openaiService.js';
 
 // POST /api/meetings
 export const createMeeting = async (req, res, next) => {
@@ -89,6 +90,51 @@ export const addParticipant = async (req, res, next) => {
     });
 
     res.json({ meeting });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /api/meetings/room/:roomId/transcribe  (multipart, field name "audio")
+export const transcribeMeeting = async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: 'No audio file uploaded' });
+
+    const meeting = await Meeting.findOne({ roomId: req.params.roomId });
+    if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
+
+    const transcriptText = await transcribeAudio(req.file.buffer, req.file.originalname);
+
+    meeting.transcript = transcriptText;
+    await meeting.save();
+
+    res.json({ transcript: transcriptText });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /api/meetings/room/:roomId/summarize
+export const summarizeMeeting = async (req, res, next) => {
+  try {
+    const meeting = await Meeting.findOne({ roomId: req.params.roomId });
+    if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
+
+    if (!meeting.transcript) {
+      return res.status(400).json({ message: 'This meeting has no transcript yet. Transcribe it first.' });
+    }
+
+    const { summary, actionItems } = await summarizeTranscript(meeting.transcript);
+
+    meeting.summary = summary;
+    meeting.actionItems = (actionItems || []).map((item) => ({
+      text: item.text,
+      assigneeName: item.assignee || null,
+      done: false,
+    }));
+    await meeting.save();
+
+    res.json({ summary: meeting.summary, actionItems: meeting.actionItems });
   } catch (error) {
     next(error);
   }

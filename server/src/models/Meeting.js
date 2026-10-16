@@ -16,10 +16,11 @@ const meetingSchema = new mongoose.Schema(
     recordingUrl: { type: String, default: '' },
     transcript: { type: String, default: '' },
     summary: { type: String, default: '' },
-    actionItems: [
+        actionItems: [
       {
         text: String,
         assignee: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        assigneeName: { type: String, default: null },
         done: { type: Boolean, default: false },
       },
     ],

@@ -8,6 +8,8 @@ import { VideoTile } from '@/components/meeting/VideoTile';
 import { ChatPanel } from '@/components/meeting/ChatPanel';
 import { ParticipantList } from '@/components/meeting/ParticipantList';
 import { MeetingControls } from '@/components/meeting/MeetingControls';
+import { useMeetingAI } from '@/hooks/useMeetingAI';
+import { AISummaryPanel } from '@/components/meeting/AISummaryPanel';
 
 type SidePanel = 'chat' | 'participants' | null;
 
@@ -21,7 +23,10 @@ export const MeetingRoomPage = () => {
 
   const { localStream, remotePeers, isScreenSharing, toggleMute, toggleCamera, toggleScreenShare } =
     useWebRTC(socket, roomId!, currentUser);
-  const { isRecording, startRecording, stopRecording } = useRecording(localStream);
+    const { status: aiStatus, transcript, summary, actionItems, error: aiError, processRecording } =
+    useMeetingAI(roomId!);
+  const { isRecording, startRecording, stopRecording } = useRecording(localStream, processRecording);
+  const [showAIPanel, setShowAIPanel] = useState(true);
 
   const [isMuted, setIsMuted] = useState(false);
   const [isCameraOff, setIsCameraOff] = useState(false);
@@ -31,7 +36,6 @@ export const MeetingRoomPage = () => {
     if (!user) navigate('/login');
   }, [user, navigate]);
 
-  
 
   const handleToggleMute = () => {
     toggleMute();
@@ -105,6 +109,16 @@ export const MeetingRoomPage = () => {
         onToggleRecording={isRecording ? stopRecording : startRecording}
         onLeave={handleLeave}
       />
+          {showAIPanel && (
+        <AISummaryPanel
+          status={aiStatus}
+          transcript={transcript}
+          summary={summary}
+          actionItems={actionItems}
+          error={aiError}
+          onClose={() => setShowAIPanel(false)}
+        />
+      )}
     </div>
   );
 };

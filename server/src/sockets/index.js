@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { notifyMentions } from '../utils/notify.js';
 
 /**
  * Socket.io middleware: verifies the JWT access token sent by the client
@@ -49,13 +50,24 @@ export const registerSocketHandlers = (io) => {
       io.to(to).emit('webrtc-ice-candidate', { from: socket.id, candidate });
     });
 
-    // --- In-meeting chat ---
-    socket.on('chat-message', ({ roomId, message, user }) => {
+    // --- In-meeting chat (with @mention notifications) ---
+    socket.on('chat-message', async ({ roomId, message, user }) => {
       io.to(roomId).emit('chat-message', {
         message,
         user,
         timestamp: new Date().toISOString(),
       });
+
+      if (typeof message === 'string' && message.includes('@')) {
+        try {
+          await notifyMentions(io, {
+            text: message,
+            fromUser: { _id: socket.userId, name: user?.name || 'Someone' },
+          });
+        } catch (err) {
+          console.error('[mentions] failed:', err.message);
+        }
+      }
     });
 
     // --- Typing indicator ---
