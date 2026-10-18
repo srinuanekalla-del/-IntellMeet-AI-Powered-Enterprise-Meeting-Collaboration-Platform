@@ -19,6 +19,7 @@ import meetingRoutes from './routes/meetingRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 
 const app = express();
+app.set('trust proxy', 1);
 
 // --- HTTP + Socket.io server (created early so we can attach req.io below) ---
 const server = http.createServer(app);
