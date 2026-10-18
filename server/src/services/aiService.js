@@ -8,7 +8,7 @@ const CONFIG = {
   groq: {
     baseURL: 'https://api.groq.com/openai/v1',
     key: process.env.GROQ_API_KEY,
-    stt: 'whisper-large-v3-turbo',
+    stt: 'whisper-large-v3',
     llm: 'openai/gpt-oss-20b',
   },
 };
@@ -37,6 +37,9 @@ export async function transcribeAudio(file) {
     file: audio,
     model: cfg.stt,
     language: process.env.WHISPER_LANGUAGE || 'en',
+    temperature: 0,
+    // A plain word list helps Whisper with days and common meeting words.
+    prompt: 'Vocabulary: demo, documentation, Monday, Tuesday, Wednesday, Thursday, Friday.',
   });
   return res.text;
 }

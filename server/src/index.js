@@ -25,13 +25,8 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: process.env.CLIENT_URL, credentials: true },
 });
+app.set('io', io);
 registerSocketHandlers(io);
-
-// --- TEMP DEBUG: log every incoming request ---
-app.use((req, _res, next) => {
-  console.log(`[REQUEST] ${req.method} ${req.originalUrl} (origin: ${req.headers.origin})`);
-  next();
-});
 
 // --- Core middleware ---
 app.use(helmet());
