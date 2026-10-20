@@ -23,11 +23,11 @@ export const registerSocketHandlers = (io) => {
   io.use(authenticateSocket);
 
   io.on('connection', (socket) => {
-    console.log(`[Socket] connected: ${socket.id} (user ${socket.userId})`);
+    console.log('[Socket] connected: ' + socket.id + ' (user ' + socket.userId + ')');
 
     // Every user gets a personal room so we can push notifications
     // to them directly, on any device/tab they're connected from.
-    socket.join(`user:${socket.userId}`);
+    socket.join('user:' + socket.userId);
 
     // --- Meeting room presence ---
     socket.on('join-room', ({ roomId, user }) => {
@@ -81,7 +81,7 @@ export const registerSocketHandlers = (io) => {
       if (roomId) {
         socket.to(roomId).emit('user-left', { socketId: socket.id, user });
       }
-      console.log(`[Socket] disconnected: ${socket.id}`);
+      console.log('[Socket] disconnected: ' + socket.id);
     });
   });
 };
