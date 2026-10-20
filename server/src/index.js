@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import './instrument.js';
+import * as Sentry from '@sentry/node';
 import aiRoutes from './routes/aiRoutes.js';
 import workspaceRoutes from './routes/workspaceRoutes.js';
 import express from 'express';
@@ -57,6 +59,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api', workspaceRoutes);
 
 // --- Error handling (must be last) ---
+Sentry.setupExpressErrorHandler(app); // reports 5xx errors to Sentry, then passes them on
 app.use(notFound);
 app.use(errorHandler);
 
@@ -66,6 +69,10 @@ const start = async () => {
   await connectDB();
   server.listen(PORT, () => {
     console.log('[Server] IntellMeet API running on port ' + PORT);
+    // One-time check: set SENTRY_TEST=true on Render, deploy, look in Sentry, then remove it.
+    if (process.env.SENTRY_TEST === 'true') {
+      Sentry.captureMessage('Sentry test: IntellMeet server started');
+    }
   });
 };
 
