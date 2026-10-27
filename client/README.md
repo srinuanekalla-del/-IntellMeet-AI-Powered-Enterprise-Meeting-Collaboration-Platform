@@ -1,192 +1,232 @@
-# IntellMeet - Client
+# IntellMeet - Server
 
-React + TypeScript front end for IntellMeet, an AI-powered meeting and collaboration platform:
-real-time video meetings, AI summaries with action items, a team project board, and notifications.
+Node.js + Express API for IntellMeet, an AI-powered meeting and collaboration platform. It handles
+authentication, meetings, real-time signalling (Socket.IO), AI transcription and summaries, the project
+board and notifications.
 
-**Live:** https://intell-meet-ai-powered-enterprise-m-eight.vercel.app
+**Live API health check:** https://intellmeet-ai-s2uy.onrender.com/api/health
+(The free Render server sleeps when idle, so the first request can take about a minute.)
 
-## What the client does
+## What the server does
 
 | Area | Days | What is implemented |
 |---|---|---|
-| Foundation | 8 | Vite + React 19 + TypeScript, Tailwind CSS, TanStack Query, Zustand, axios client with automatic token refresh, Socket.IO client, hand-rolled shadcn-style UI primitives (Button, Input, Card) |
-| Authentication | 9 | Login and signup pages, auth store, `ProtectedRoute`, dashboard with the user's meetings |
-| Meetings | 10-14 | Lobby, video room (WebRTC), in-meeting chat with typing indicator, screen sharing, recording controls, live participant list |
-| AI | 15-17 | Record a clip, upload it, see the transcript, summary and action items; post-meeting summaries dashboard |
-| Collaboration | 18-20 | Kanban project board, tasks created from action items with an assignee, notification bell with live updates |
-| Delivery | 22-26 | Multi-stage Docker build served by nginx, Vercel deployment, optional Sentry error tracking |
+| Foundation | 1 | Express with ES modules, MongoDB (Mongoose), dotenv, CORS, Helmet, Socket.IO, folder structure |
+| Authentication | 2-3 | Signup and login, JWT access tokens (15 min) plus httpOnly refresh cookie (7 days), bcrypt hashing, protected routes, rate limiting on login and signup, Cloudinary avatar upload |
+| Meetings | 4-6 | Meeting model and CRUD, Redis caching, Socket.IO rooms, chat, WebRTC signalling relay |
+| AI | 15-17 | Audio upload, Whisper transcription, summary and action-item extraction, saved summaries |
+| Collaboration | 18-20 | Projects, members, tasks, tasks created from action items, notifications with live delivery and `@mentions` |
+| Delivery | 22-26 | Multi-stage Docker image, health check, Prometheus `/metrics`, optional Sentry, Render deployment |
 
 ## Tech stack
 
-React 19, TypeScript, Vite 5, Tailwind CSS, TanStack Query, Zustand, React Router 6, axios,
-socket.io-client, WebRTC (browser APIs), `@sentry/react` (optional).
+Node 22, Express 4, Mongoose 8 (MongoDB Atlas), Socket.IO 4, ioredis, jsonwebtoken, bcryptjs, multer,
+Cloudinary, helmet, express-rate-limit, OpenAI-compatible SDK (used for Groq), prom-client, `@sentry/node`.
 
 ## Run it locally
 
 ```bash
-cd client
-npm install
-cp .env.example .env      # Windows: copy .env.example .env
-npm run dev
+cd server
+npm install --legacy-peer-deps
+cp .env.example .env       # Windows: copy .env.example .env   (then fill in your own values)
+npm run dev                # nodemon src/index.js
 ```
 
-Opens at http://localhost:5173. Start the backend (`server/`) first, because the client calls it directly
-on port 5000.
+Listens on http://localhost:5000. If Redis is not running you will see `[Redis] not available`; the API still
+works with caching switched off.
 
-### With Docker (whole stack)
+`--legacy-peer-deps` is needed because `multer-storage-cloudinary` expects Cloudinary v1 while the project
+uses v2.
 
-From the project root:
+### With Docker
 
-```bash
-docker compose up --build
-```
-
-The client is served by nginx at http://localhost:5173. See the root README for the monitoring stack.
+From the project root: `docker compose up --build` (adds Redis, the client and, optionally, Prometheus and
+Grafana). Do not run `npm run dev` at the same time, because both use port 5000.
 
 ## Environment variables
 
-Vite reads these at **build time** and bakes them into the JavaScript, so changing one means rebuilding
-(or redeploying on Vercel).
+Create `server/.env` from `.env.example`. Never commit it.
 
-| Variable | Default | Purpose |
+| Variable | Required | Purpose |
 |---|---|---|
-| `VITE_API_URL` | `http://localhost:5000/api` | REST API base address |
-| `VITE_SOCKET_URL` | `http://localhost:5000` | Socket.IO server address |
-| `VITE_SENTRY_DSN` | (empty) | Turns Sentry on when set |
-| `VITE_SENTRY_TEST` | (empty) | Set to `true` once to send a test message to Sentry, then remove it |
-
-Never put secrets in `VITE_*` variables: everything in them ships to the browser.
+| `PORT` | no (5000) | HTTP port |
+| `NODE_ENV` | no | `production` turns on secure cookies and hides error stacks |
+| `CLIENT_URL` | yes | Allowed browser origin for CORS and Socket.IO. No trailing slash |
+| `MONGO_URI` | yes | MongoDB connection string |
+| `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | yes | Token signing keys (use long random values) |
+| `JWT_ACCESS_EXPIRES`, `JWT_REFRESH_EXPIRES` | no (15m, 7d) | Token lifetimes |
+| `REDIS_URL` | no | Cache; without it caching is disabled |
+| `AI_PROVIDER` | no (groq) | `groq`, `openai` or `mock` (fixed fake output, no key needed) |
+| `GROQ_API_KEY` | for groq | Groq API key |
+| `OPENAI_API_KEY` | for openai | OpenAI API key |
+| `WHISPER_LANGUAGE` | no (en) | Language hint for transcription |
+| `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | for avatars | Avatar upload |
+| `METRICS_TOKEN` | recommended in production | If set, `/metrics` requires `Authorization: Bearer <token>` |
+| `SENTRY_DSN` | no | Turns Sentry error tracking on |
+| `SENTRY_TEST` | no | Set to `true` once to send a test message, then remove it |
 
 ## Scripts
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Start the Vite dev server with hot reload |
-| `npm run build` | Type-check with `tsc -b`, then build to `dist/` |
-| `npm run preview` | Serve the production build locally |
+| `npm run dev` | Start with nodemon (restarts on save) |
+| `npm start` | Start with Node (used in Docker and on Render) |
+| `node src/scripts/testSummaries.js` | AI accuracy check on three sample meetings (needs a real AI key) |
 
-## Routes
+## API
 
-| Path | Page | Needs login |
+All routes except signup, login, refresh, logout and health require `Authorization: Bearer <access token>`.
+
+### Authentication (`/api/auth`)
+
+| Method | Path | Purpose |
 |---|---|---|
-| `/login`, `/signup` | Authentication | No |
-| `/dashboard` | Start a meeting, list your meetings, navigation, notification bell | Yes |
-| `/lobby/:roomId` | Camera and microphone check before joining | Yes |
-| `/meeting/:roomId` | Video room, chat, recording, AI summary box | Yes |
-| `/summaries` | Past meeting summaries, action items, "Create task" | Yes |
-| `/projects` | Kanban board, members, tasks | Yes |
+| POST | `/signup`, `/login` | Create an account or log in (rate limited). Returns the user and an access token, sets the refresh cookie |
+| POST | `/refresh` | New access token from the refresh cookie |
+| POST | `/logout` | Clear the refresh cookie |
 
-`/` redirects to `/dashboard`. Anyone not logged in is sent to `/login`.
+### Meetings (`/api/meetings`)
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST, GET | `/` | Create a meeting, list meetings |
+| GET, PATCH, DELETE | `/:id` | Read, update or delete a meeting |
+| POST | `/:id/participants` | Add a participant |
+| POST | `/room/:roomId/transcribe` | Upload audio (multipart field `audio`, up to 50 MB); returns transcript, summary and action items |
+| POST | `/room/:roomId/summarize` | Re-run the summary on a saved transcript |
+| GET | `/summaries`, `/summaries/:id` | Your saved summaries |
+
+### Projects and tasks (`/api`)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET, POST | `/projects` | List or create projects |
+| GET | `/projects/:projectId` | One project with its members |
+| POST | `/projects/:projectId/members` | Add a member by email |
+| GET, POST | `/projects/:projectId/tasks` | List or create tasks |
+| POST | `/tasks/from-action-item` | Turn a summary action item into a task |
+| PATCH, DELETE | `/tasks/:id` | Move, reassign or delete a task |
+
+### Other
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET, PATCH | `/api/notifications`, `/api/notifications/:id/read` | List notifications, mark one read |
+| GET, PATCH | `/api/profile` | Profile and avatar |
+| GET | `/api/health` | Health check, no login needed |
+| GET | `/metrics` | Prometheus metrics (token-protected when `METRICS_TOKEN` is set) |
 
 ## Folder structure
 
 ```
-client/
-├── Dockerfile               # multi-stage: build with Node, serve with nginx
-├── nginx.conf               # SPA fallback, gzip, asset caching
-├── vercel.json              # rewrites every path to index.html on Vercel
+server/
+├── Dockerfile               # multi-stage, runs as the unprivileged "node" user
 ├── .dockerignore
 ├── .env.example
-├── tailwind.config.js
-├── tsconfig.json            # strict mode; "@/" maps to src/
-├── vite.config.ts
 ├── package.json
 └── src/
-    ├── api/
-    │   └── workspace.ts          # projects, tasks, summaries, recording upload
-    ├── components/
-    │   ├── ui/                   # button.tsx, input.tsx, card.tsx
-    │   ├── meeting/              # meeting-room pieces (chat panel and others)
-    │   ├── CreateTaskModal.tsx   # turn an action item into a task
-    │   ├── MeetingSummaryModal.tsx
-    │   ├── NotificationBell.tsx
-    │   └── ProtectedRoute.tsx
-    ├── hooks/
-    │   ├── useMeetingAI.ts       # upload a recording, hold summary + action items
-    │   └── useWebRTC.ts          # peer connections, media streams, signalling
-    ├── lib/
-    │   ├── api.ts                # axios instance, auto-refresh on 401
-    │   ├── authHooks.ts          # useLogin / useSignup / useLogout
-    │   ├── queryClient.ts
-    │   └── socket.ts             # shared authenticated Socket.IO connection
-    ├── pages/
-    │   ├── LoginPage.tsx
-    │   ├── SignupPage.tsx
-    │   ├── DashboardPage.tsx
-    │   ├── LobbyPage.tsx
-    │   ├── MeetingRoomPage.tsx
-    │   ├── PostMeetingDashboard.tsx
-    │   └── ProjectBoard.tsx
-    ├── store/
-    │   └── authStore.ts          # Zustand: user and access token
-    ├── types/                    # index.ts, workspace.ts
-    ├── App.tsx                   # routes
-    └── main.tsx                  # entry point, providers, optional Sentry
+    ├── index.js             # app setup, middleware, routes, server start
+    ├── instrument.js        # Sentry setup (only active when SENTRY_DSN is set)
+    ├── metrics.js           # Prometheus metrics and /metrics handler
+    ├── config/              # db.js (MongoDB), redis.js
+    ├── controllers/         # auth, profile, meeting, meetingAI, workspace, notification
+    ├── middleware/          # auth.js (protect), errorHandler.js, rateLimiter.js
+    ├── models/              # User, Meeting, MeetingSummary, Project, Task, Notification
+    ├── routes/              # authRoutes, profileRoutes, meetingRoutes, aiRoutes,
+    │                        # workspaceRoutes, notificationRoutes
+    ├── services/            # aiService.js, cloudinary.js, notificationService.js
+    ├── sockets/             # index.js (Socket.IO auth and events)
+    ├── utils/               # generateTokens.js, notify.js
+    └── scripts/             # testSummaries.js
 ```
+
+`aiRoutes` is mounted before `meetingRoutes` so the transcribe and summaries routes are handled by the AI
+controller.
 
 ## How it works
 
-### Authentication
+### Authentication and security
 
-1. `LoginPage` / `SignupPage` call `useLogin()` / `useSignup()`, which post to `/api/auth/login|signup`.
-2. The returned user and access token go into the Zustand store.
-3. The axios request interceptor in `lib/api.ts` adds `Authorization: Bearer <token>` to every call.
-4. On a 401 (the access token lasts 15 minutes), the response interceptor calls `POST /api/auth/refresh`,
-   which uses the httpOnly refresh cookie, stores the new token and retries the original request once.
-   If refresh fails, the user is logged out.
-5. `ProtectedRoute` redirects anyone without a session to `/login`.
+- Passwords are hashed with bcryptjs (12 rounds).
+- The access token (15 minutes) is sent in the response body. The refresh token (7 days) lives in an httpOnly
+  cookie, `secure` in production and `sameSite: none` in production so the Vercel front end can use it.
+- `protect` middleware verifies the access token on every private route. Socket.IO connections are verified
+  the same way during the handshake.
+- `authLimiter` rate-limits login and signup. `trust proxy` is on so limits see real visitor addresses behind
+  Render.
+- Helmet sets security headers, and CORS only allows `CLIENT_URL` with credentials.
 
-### Video meetings
+### AI pipeline (`services/aiService.js`)
 
-`useWebRTC` creates one peer connection per participant. Signalling goes through Socket.IO:
+1. `transcribeAudio` sends the recording to Whisper large-v3 (Groq by default, language hint `en`, vocabulary
+   prompt for days and meeting words).
+2. `summarizeTranscript` asks the language model for JSON: a 2-4 sentence summary and action items with the
+   assignee and the deadline *words as spoken*.
+3. Dates are resolved in code (`resolveDue`), not by the model, because language models are unreliable at
+   weekday arithmetic. "next Friday", "Wednesday" and "tomorrow" become real calendar dates.
+4. The result is saved as a `MeetingSummary` and an `action-item` notification is created.
+5. Provider errors are turned into friendly messages (for example a 429 becomes "temporarily unavailable").
 
-| Event | Direction | Purpose |
-|---|---|---|
-| `join-room` | client -> server | Enter a room with the user's name |
-| `user-joined`, `user-left` | server -> client | Presence updates |
-| `webrtc-offer`, `webrtc-answer`, `webrtc-ice-candidate` | relayed | WebRTC negotiation |
-| `chat-message` | both | Chat; `@name` mentions create notifications |
-| `typing` | both | Typing indicator |
+`AI_PROVIDER=mock` returns fixed output, so the UI can be built and demoed without an API key.
 
-The recording button captures audio with `MediaRecorder` and also offers a local `.webm` download.
+### Real time (`sockets/index.js`)
 
-### AI summary and tasks
-
-1. Stop a recording -> `useMeetingAI` posts the audio to `POST /api/meetings/room/:roomId/transcribe`.
-2. The server transcribes it, writes the summary and action items, saves them and returns the result.
-3. `MeetingSummaryModal` shows the summary, action items and transcript.
-4. `/summaries` lists saved summaries. "Create task" opens `CreateTaskModal` (pick a project and an assignee),
-   and the item shows "Task created".
-
-### Project board
-
-`ProjectBoard` has three columns (To do, In progress, Done) using native HTML5 drag and drop. A move updates
-the screen at once and then `PATCH`es the task; if the request fails the card goes back and an error shows.
-Members are added by email, and assignees must be members of the project.
+| Event | Purpose |
+|---|---|
+| connection | Token check, then the socket joins its personal room `user:<id>` |
+| `join-room`, `user-joined`, `user-left` | Meeting presence |
+| `webrtc-offer`, `webrtc-answer`, `webrtc-ice-candidate` | WebRTC signalling relay |
+| `chat-message` | Broadcast to the room; `@name` creates a notification |
+| `typing` | Typing indicator |
+| `notification:new` | Sent to `user:<id>` when a notification is created |
 
 ### Notifications
 
-`NotificationBell` loads `GET /api/notifications` and refreshes immediately when the server sends the
-`notification:new` Socket.IO event (a 30-second poll is the fallback). Clicking a notification marks it
-read and opens the related page.
+`notifyUser` saves a notification and emits `notification:new` to the recipient's room. Types:
+`meeting-invite`, `meeting-starting`, `task-assigned`, `chat-mention`, `action-item`. A failure to save a
+notification is logged and never breaks the request that caused it.
 
-## Build and deploy
+## Data models
 
-- **Docker:** `Dockerfile` builds with Node 22, then copies `dist/` into `nginx:alpine`. `nginx.conf` serves
-  `index.html` for unknown paths so deep links like `/meeting/123` survive a refresh.
-- **Vercel:** set Root Directory to `client` and add `VITE_API_URL` / `VITE_SOCKET_URL` before the first
-  deploy. `vercel.json` provides the same path fallback.
-- **CORS:** the backend must list the deployed address in `CLIENT_URL`, with no trailing slash.
+| Model | Main fields |
+|---|---|
+| User | name, email, password (hashed) |
+| Meeting | title, roomId, status, scheduledAt, participants |
+| MeetingSummary | roomId, createdBy, transcript, summary, actionItems (text, assignee, dueDate, task) |
+| Project | name, description, owner, members |
+| Task | project, title, status (`todo`, `in_progress`, `done`), assignee, dueDate, sourceSummary |
+| Notification | recipient, type, message, read |
 
-## Error tracking (optional)
+## Monitoring and errors
 
-When `VITE_SENTRY_DSN` is set, `main.tsx` starts Sentry and reports uncaught browser errors. Without it,
-nothing is sent.
+- **Prometheus:** `/metrics` exposes `intellmeet_http_request_duration_seconds` (labelled by method, route
+  pattern and status), `intellmeet_socket_connections`, `intellmeet_transcriptions_total` and the standard
+  process metrics (memory, CPU, event-loop lag). Route labels are patterns such as `/:id`, never raw URLs.
+- **Grafana:** a ready dashboard is in `monitoring/` at the project root.
+- **Sentry:** server errors with status 500 or above are reported when `SENTRY_DSN` is set.
+
+## Docker and deployment
+
+- **Docker:** the first stage installs production dependencies with `npm ci --omit=dev --legacy-peer-deps`,
+  the second stage is a small `node:22-alpine` image running as the `node` user, with a health check on
+  `/api/health`.
+- **Render:** create a Web Service from the repository with Root Directory `server` and Language Docker, set
+  Health Check Path to `/api/health`, turn Auto-Deploy off, and add the environment variables above.
+  MongoDB Atlas must allow Render's addresses (Network Access, `0.0.0.0/0` for a free tier).
+- **CI/CD:** GitHub Actions checks the code, builds the image, and calls a Render deploy hook after a push to
+  `main`.
+
+## Testing
+
+- `node src/scripts/testSummaries.js` runs three sample meetings through the AI and checks assignees,
+  deadlines and false positives (target: 5 of 5 matched, 0 false positives).
+- A JMeter load test and an OWASP ZAP scan are in `jmeter/` and `security/` at the project root.
 
 ## Known limitations
 
-- Video between two different networks may need a TURN relay server; same machine or same network works.
-- `@mentions` match single-word names only.
-- The refresh cookie is cross-site on Vercel + Render, so Incognito windows and some strict browsers
-  block it and log you out on reload. Use a normal window.
-- The free Render backend sleeps when idle, so the first request after a pause can take about a minute.
+- One server instance. To run several, Socket.IO needs sticky sessions or a Redis adapter.
+- Redis is optional; without it caching is simply off.
+- `multer` 1.x is deprecated upstream; upgrading to 2.x is a recommended next step.
+- `src/services/openaiService.js` is the original Whisper helper and is no longer used by the active code path.
+- Speech recognition can mishear names in noisy audio, so action-item owners depend on audio quality.
+- The free Render tier sleeps after about 15 minutes idle.
